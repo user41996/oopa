@@ -3,6 +3,7 @@ from django.urls import reverse
 import uuid
 from datetime import date
 from django.contrib.auth.models import User
+from django.forms import ModelForm
 
 
 class Genre(models.Model):
@@ -13,12 +14,10 @@ class Genre(models.Model):
 
 
 class Language(models.Model):
-    """Model representing a Language (e.g. English, French, Japanese, etc.)"""
     name = models.CharField(max_length=200,
                             help_text="Enter the book's natural language (e.g. English, French, Japanese etc.)")
 
     def __str__(self):
-        """String for representing the Model object (in Admin site etc.)"""
         return self.nam
 
 
@@ -30,11 +29,16 @@ class Book(models.Model):
                             help_text='13 Character <a href="https://www.isbn-international.org/content/what-isbn">ISBN number</a>')
     genre = models.ManyToManyField(Genre, help_text='Select a genre for this book')
 
-    def __str__(self):
-        return self.title
+    def display_genre(self):
+        return ', '.join(genre.name for genre in self.genre.all()[:3])
+
+    display_genre.short_description = 'Genre'
 
     def get_absolute_url(self):
         return reverse('book-detail', args=[str(self.id)])
+
+    def __str__(self):
+        return self.title
 
 
 class BookInstance(models.Model):
@@ -43,11 +47,13 @@ class BookInstance(models.Model):
     book = models.ForeignKey('Book', on_delete=models.RESTRICT, null=True)
     imprint = models.CharField(max_length=200)
     due_back = models.DateField(null=True, blank=True)
+    borrower = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True)
 
     @property
     def is_overdue(self):
-        """Determines if the book is overdue based on due date and current date."""
-        return bool(self.due_back and date.today() > self.due_back)
+        if self.due_back and date.today() > self.due_back:
+            return True
+        return False
 
     LOAN_STATUS = (
         ('m', 'Maintenance'),
@@ -66,6 +72,7 @@ class BookInstance(models.Model):
 
     class Meta:
         ordering = ['due_back']
+        permissions = (("can_mark_returned", "Set book as returned"),)
 
     def __str__(self):
         return f'{self.id} ({self.book.title})'
